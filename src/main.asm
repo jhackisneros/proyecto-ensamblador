@@ -42,7 +42,9 @@ REVOFF  db 0x1B,'[0m'
 REVOFF_L equ $-REVOFF
 
 NL      db 10
-SP3     db '   '
+
+; >>> IMPORTANTE: 1 espacio (para que 3 cajas quepan en 80 cols)
+SP3     db ' '
 SP3_L   equ $-SP3
 
 TITLE   db '              MINIARCADEOS',10,10
@@ -67,6 +69,17 @@ MID2 db '|3) COMING SOON          |'
 MID_L equ 26
 
 MIDTAB dd MID0, MID1, MID2
+
+; Texto de seleccion (para que se vea SI O SI dónde estás)
+SEL0    db 10,'SELECCIONADO: TRES EN RAYA',10
+SEL0_L  equ $-SEL0
+SEL1    db 10,'SELECCIONADO: PONG',10
+SEL1_L  equ $-SEL1
+SEL2    db 10,'SELECCIONADO: COMING SOON',10
+SEL2_L  equ $-SEL2
+
+SELTAB  dd SEL0, SEL1, SEL2
+SELLEN  dd SEL0_L, SEL1_L, SEL2_L
 
 section .bss
 key      resb 1
@@ -194,7 +207,7 @@ read_key:
     cmp al, 0x1B
     jne .none
 
-    ; intento leer '[' (si es flecha). Si no llega, es ESC solo.
+    ; intento leer '[' (si es flecha). Si no llega, ESC solo.
     mov ecx, tmp1
     mov edx, 1
     call rin
@@ -204,7 +217,7 @@ read_key:
     cmp al, '['
     jne .esc_alone
 
-    ; leo 1 byte más: A/B/C/D
+    ; leo 1 byte más: C/D
     mov ecx, tmp1
     mov edx, 1
     call rin
@@ -338,6 +351,14 @@ draw_menu:
 
     mov ecx, NL
     mov edx, 1
+    call p
+
+    ; >>> linea clara de seleccionado
+    mov eax, [selected]
+    mov edi, SELTAB
+    mov ecx, [edi + eax*4]
+    mov edi, SELLEN
+    mov edx, [edi + eax*4]
     call p
 
     mov ecx, F1
