@@ -1,4 +1,4 @@
-; MINIARCADEOS - Menu 2 cajas (1x2) con flechas + Enter + ESC
+k; MINIARCADEOS - Menu 2 cajas (1x2) con flechas + Enter + ESC
 ; NASM 32-bit Linux (WSL). Terminal en RAW mode.
 ; Compila con:
 ;   nasm -f elf32 src/main.asm -o main.o
@@ -423,9 +423,3 @@ _start:
     mov eax, SYS_EXIT
     xor ebx, ebx
     int 0x80
-
-
-
-
-
-
