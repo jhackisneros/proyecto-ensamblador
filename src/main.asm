@@ -1,11 +1,14 @@
-k; MINIARCADEOS - Menu 2 cajas (1x2) con flechas + Enter + ESC
+; MINIARCADEOS - Menu 3 cajas (1x3) con flechas + Enter + ESC
 ; NASM 32-bit Linux (WSL). Terminal en RAW mode.
 ; Compila con:
 ;   nasm -f elf32 src/main.asm -o main.o
-;   ld -m elf_i386 -o app main.o
-;   ./app
+;   nasm -f elf32 src/games/tres.asm -o tres.o
+;   nasm -f elf32 src/games/pong.asm -o pong.o
+;   ld -m elf_i386 -o app main.o tres.o pong.o
 
 global _start
+extern show_tres
+extern show_pong
 
 %define SYS_EXIT   1
 %define SYS_READ   3
@@ -53,20 +56,17 @@ F2_L    equ $-F2
 SOON    db 10,'COMING SOON... (ENTER para volver)',10
 SOON_L  equ $-SOON
 
-TRESMSG db 10,'TRES EN RAYA... (ENTER para volver)',10
-TRES_L  equ $-TRESMSG
-
 ; Caja: 26 chars
 TOPSEG  db '+------------------------+'
 TOP_L   equ $-TOPSEG
 
 ; Líneas MID completas (26 chars): '|' + 24 chars + '|'
 MID0 db '|1) TRES EN RAYA         |'
-MID1 db '|2) COMING SOON          |'
+MID1 db '|2) PONG                 |'
+MID2 db '|3) COMING SOON          |'
 MID_L equ 26
 
-; tabla de punteros a MID por índice (0..1)
-MIDTAB dd MID0, MID1
+MIDTAB dd MID0, MID1, MID2
 
 section .bss
 key      resb 1
@@ -84,8 +84,7 @@ wout:
     int 0x80
     ret
 
-; -------- sys_read(STDIN, ecx, edx) --------
-; returns EAX = bytes read
+; -------- sys_read(STDIN, ecx, edx) -> eax bytes --------
 rin:
     mov eax, SYS_READ
     mov ebx, STDIN
@@ -153,8 +152,7 @@ raw_on:
     and eax, ~(ICANON | ECHO)
     mov [term_new+12], eax
 
-    ; IMPORTANTE: evitar que ESC se bloquee:
-    ; VMIN=0, VTIME=1 (0.1s) => read "timeout" corto
+    ; evitar bloqueo con ESC: VMIN=0, VTIME=1 (0.1s)
     mov byte [term_new + 17 + VMIN], 0
     mov byte [term_new + 17 + VTIME], 1
 
@@ -196,7 +194,7 @@ read_key:
     cmp al, 0x1B
     jne .none
 
-    ; intento leer 1 byte: '[' (si es flecha). Si no llega, es ESC solo.
+    ; intento leer '[' (si es flecha). Si no llega, es ESC solo.
     mov ecx, tmp1
     mov edx, 1
     call rin
@@ -240,7 +238,7 @@ read_key:
     ret
 
 ; -------- draw one segment highlighted if (eax==ebx) --------
-; IN: EAX = box_index (0..1), EBX = selected_index
+; IN: EAX = box_index (0..2), EBX = selected_index
 ;     ECX = ptr, EDX = len
 draw_seg_hl:
     cmp eax, ebx
@@ -253,7 +251,7 @@ draw_seg_hl:
     call p
     ret
 
-; -------- draw menu (2 boxes) --------
+; -------- draw menu (3 boxes) --------
 draw_menu:
     call tui_clear
     mov ecx, TITLE
@@ -267,12 +265,19 @@ draw_menu:
     mov ecx, TOPSEG
     mov edx, TOP_L
     call draw_seg_hl
-
     mov ecx, SP3
     mov edx, SP3_L
     call p
 
     mov eax, 1
+    mov ecx, TOPSEG
+    mov edx, TOP_L
+    call draw_seg_hl
+    mov ecx, SP3
+    mov edx, SP3_L
+    call p
+
+    mov eax, 2
     mov ecx, TOPSEG
     mov edx, TOP_L
     call draw_seg_hl
@@ -288,13 +293,20 @@ draw_menu:
     mov ecx, [edi + 0*4]
     mov edx, MID_L
     call draw_seg_hl
-
     mov ecx, SP3
     mov edx, SP3_L
     call p
 
     mov eax, 1
     mov ecx, [edi + 1*4]
+    mov edx, MID_L
+    call draw_seg_hl
+    mov ecx, SP3
+    mov edx, SP3_L
+    call p
+
+    mov eax, 2
+    mov ecx, [edi + 2*4]
     mov edx, MID_L
     call draw_seg_hl
 
@@ -307,12 +319,19 @@ draw_menu:
     mov ecx, TOPSEG
     mov edx, TOP_L
     call draw_seg_hl
-
     mov ecx, SP3
     mov edx, SP3_L
     call p
 
     mov eax, 1
+    mov ecx, TOPSEG
+    mov edx, TOP_L
+    call draw_seg_hl
+    mov ecx, SP3
+    mov edx, SP3_L
+    call p
+
+    mov eax, 2
     mov ecx, TOPSEG
     mov edx, TOP_L
     call draw_seg_hl
@@ -329,7 +348,7 @@ draw_menu:
     call p
     ret
 
-; -------- menu loop returns EAX (0..1) or -1 --------
+; -------- menu loop returns EAX (0..2) or -1 --------
 menu_loop:
     mov dword [selected], 0
 .redraw:
@@ -356,7 +375,7 @@ menu_loop:
 .chkR:
     cmp al, 'R'
     jne .redraw
-    cmp eax, 1
+    cmp eax, 2
     je .redraw
     inc eax
     mov [selected], eax
@@ -369,7 +388,7 @@ menu_loop:
     mov eax, -1
     ret
 
-; -------- screens --------
+; -------- helper wait ENTER --------
 wait_enter:
 .w:
     call read_key
@@ -377,18 +396,11 @@ wait_enter:
     jne .w
     ret
 
+; -------- coming soon screen --------
 show_soon:
     call tui_clear
     mov ecx, SOON
     mov edx, SOON_L
-    call p
-    call wait_enter
-    ret
-
-show_tres:
-    call tui_clear
-    mov ecx, TRESMSG
-    mov edx, TRES_L
     call p
     call wait_enter
     ret
@@ -406,11 +418,17 @@ _start:
     cmp eax, 0
     je .go_tres
     cmp eax, 1
+    je .go_pong
+    cmp eax, 2
     je .go_soon
     jmp .loop
 
 .go_tres:
     call show_tres
+    jmp .loop
+
+.go_pong:
+    call show_pong
     jmp .loop
 
 .go_soon:
