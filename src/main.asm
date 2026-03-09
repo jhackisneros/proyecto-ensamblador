@@ -1,11 +1,3 @@
-; MINIARCADEOS - Menu 3 cajas (1x3) con flechas + Enter + ESC
-; NASM 32-bit Linux (WSL). Terminal en RAW mode.
-; Compila con:
-;   nasm -f elf32 src/main.asm -o main.o
-;   nasm -f elf32 src/games/tres.asm -o tres.o
-;   nasm -f elf32 src/games/pong.asm -o pong.o
-;   ld -m elf_i386 -o app main.o tres.o pong.o
-
 global _start
 extern show_tres
 extern show_pong
@@ -17,19 +9,15 @@ extern show_pong
 
 %define STDIN      0
 %define STDOUT     1
-
 %define TCGETS     0x5401
 %define TCSETS     0x5402
-
 %define ICANON     0x0002
 %define ECHO       0x0008
 
-; termios c_cc indexes
 %define VTIME      5
 %define VMIN       6
 
 section .data
-; ANSI
 CLS     db 0x1B,'[2J',0x1B,'[H'
 CLS_L   equ $-CLS
 HIDE    db 0x1B,'[?25l'
@@ -42,8 +30,6 @@ REVOFF  db 0x1B,'[0m'
 REVOFF_L equ $-REVOFF
 
 NL      db 10
-
-; >>> IMPORTANTE: 1 espacio (para que 3 cajas quepan en 80 cols)
 SP3     db ' '
 SP3_L   equ $-SP3
 
@@ -58,24 +44,21 @@ F2_L    equ $-F2
 SOON    db 10,'COMING SOON... (ENTER para volver)',10
 SOON_L  equ $-SOON
 
-; Caja: 26 chars
 TOPSEG  db '+------------------------+'
 TOP_L   equ $-TOPSEG
 
-; Líneas MID completas (26 chars): '|' + 24 chars + '|'
 MID0 db '|1) TRES EN RAYA         |'
-MID1 db '|2) PONG                 |'
+MID1 db '|2) PONG (1 JUGADOR)     |'
 MID2 db '|3) COMING SOON          |'
 MID_L equ 26
 
 MIDTAB dd MID0, MID1, MID2
 
-; Texto de seleccion (para que se vea SI O SI dónde estás)
-SEL0    db 10,'SELECCIONADO: TRES EN RAYA',10
+SEL0    db 10,' >>> [ JUGAR TRES EN RAYA ] <<< ',10
 SEL0_L  equ $-SEL0
-SEL1    db 10,'SELECCIONADO: PONG',10
+SEL1    db 10,' >>> [ JUGAR PONG ]         <<< ',10
 SEL1_L  equ $-SEL1
-SEL2    db 10,'SELECCIONADO: COMING SOON',10
+SEL2    db 10,' >>> [ PROXIMAMENTE... ]    <<< ',10
 SEL2_L  equ $-SEL2
 
 SELTAB  dd SEL0, SEL1, SEL2
@@ -90,27 +73,23 @@ selected resd 1
 
 section .text
 
-; -------- sys_write(STDOUT, ecx, edx) --------
 wout:
     mov eax, SYS_WRITE
     mov ebx, STDOUT
     int 0x80
     ret
 
-; -------- sys_read(STDIN, ecx, edx) -> eax bytes --------
 rin:
     mov eax, SYS_READ
     mov ebx, STDIN
     int 0x80
     ret
 
-; -------- ioctl(ebx=fd, ecx=req, edx=argp) --------
 ioctl0:
     mov eax, SYS_IOCTL
     int 0x80
     ret
 
-; -------- TUI --------
 tui_clear:
     mov ecx, CLS
     mov edx, CLS_L
@@ -141,15 +120,12 @@ rev_off:
     call wout
     ret
 
-; -------- RAW mode ON/OFF --------
 raw_on:
-    ; TCGETS -> term_old
     mov ebx, STDIN
     mov ecx, TCGETS
     mov edx, term_old
     call ioctl0
 
-    ; copy old -> new (64 bytes)
     mov esi, term_old
     mov edi, term_new
     mov ecx, 64
@@ -160,16 +136,13 @@ raw_on:
     inc edi
     loop .copy
 
-    ; c_lflag offset 12: disable ICANON & ECHO
     mov eax, [term_new+12]
     and eax, ~(ICANON | ECHO)
     mov [term_new+12], eax
 
-    ; evitar bloqueo con ESC: VMIN=0, VTIME=1 (0.1s)
     mov byte [term_new + 17 + VMIN], 0
-    mov byte [term_new + 17 + VTIME], 1
+    mov byte [term_new + 17 + VTIME], 0
 
-    ; TCSETS <- term_new
     mov ebx, STDIN
     mov ecx, TCSETS
     mov edx, term_new
@@ -183,13 +156,10 @@ raw_off:
     call ioctl0
     ret
 
-; -------- print helper (ecx=ptr, edx=len) --------
 p:
     call wout
     ret
 
-; -------- read key --------
-; returns AL: L/R/E(enter)/Q(esc) or 0
 read_key:
     mov ecx, key
     mov edx, 1
@@ -198,7 +168,6 @@ read_key:
     jne .none
     mov al, [key]
 
-    ; ENTER puede ser 10 o 13
     cmp al, 10
     je .enter
     cmp al, 13
@@ -207,7 +176,6 @@ read_key:
     cmp al, 0x1B
     jne .none
 
-    ; intento leer '[' (si es flecha). Si no llega, ESC solo.
     mov ecx, tmp1
     mov edx, 1
     call rin
@@ -217,7 +185,6 @@ read_key:
     cmp al, '['
     jne .esc_alone
 
-    ; leo 1 byte más: C/D
     mov ecx, tmp1
     mov edx, 1
     call rin
@@ -235,7 +202,6 @@ read_key:
 .esc_alone:
     mov al, 'Q'
     ret
-
 .left:
     mov al, 'L'
     ret
@@ -245,14 +211,10 @@ read_key:
 .enter:
     mov al, 'E'
     ret
-
 .none:
     xor al, al
     ret
 
-; -------- draw one segment highlighted if (eax==ebx) --------
-; IN: EAX = box_index (0..2), EBX = selected_index
-;     ECX = ptr, EDX = len
 draw_seg_hl:
     cmp eax, ebx
     jne .nohl
@@ -264,7 +226,6 @@ draw_seg_hl:
     call p
     ret
 
-; -------- draw menu (3 boxes) --------
 draw_menu:
     call tui_clear
     mov ecx, TITLE
@@ -273,7 +234,6 @@ draw_menu:
 
     mov ebx, [selected]
 
-    ; TOP
     mov eax, 0
     mov ecx, TOPSEG
     mov edx, TOP_L
@@ -299,9 +259,7 @@ draw_menu:
     mov edx, 1
     call p
 
-    ; MID
     mov edi, MIDTAB
-
     mov eax, 0
     mov ecx, [edi + 0*4]
     mov edx, MID_L
@@ -327,7 +285,6 @@ draw_menu:
     mov edx, 1
     call p
 
-    ; BOT
     mov eax, 0
     mov ecx, TOPSEG
     mov edx, TOP_L
@@ -353,7 +310,6 @@ draw_menu:
     mov edx, 1
     call p
 
-    ; >>> linea clara de seleccionado
     mov eax, [selected]
     mov edi, SELTAB
     mov ecx, [edi + eax*4]
@@ -369,7 +325,6 @@ draw_menu:
     call p
     ret
 
-; -------- menu loop returns EAX (0..2) or -1 --------
 menu_loop:
     mov dword [selected], 0
 .redraw:
@@ -378,26 +333,28 @@ menu_loop:
     call read_key
     cmp al, 0
     je .wait
-    cmp al, 'Q'
+
+    mov bl, al
+    cmp bl, 'Q'
     je .esc
-    cmp al, 'E'
+    cmp bl, 'E'
     je .enter
 
     mov eax, [selected]
 
-    cmp al, 'L'
+    cmp bl, 'L'
     jne .chkR
     cmp eax, 0
-    je .redraw
+    je .wait
     dec eax
     mov [selected], eax
     jmp .redraw
 
 .chkR:
-    cmp al, 'R'
-    jne .redraw
+    cmp bl, 'R'
+    jne .wait
     cmp eax, 2
-    je .redraw
+    je .wait
     inc eax
     mov [selected], eax
     jmp .redraw
@@ -409,7 +366,6 @@ menu_loop:
     mov eax, -1
     ret
 
-; -------- helper wait ENTER --------
 wait_enter:
 .w:
     call read_key
@@ -417,7 +373,6 @@ wait_enter:
     jne .w
     ret
 
-; -------- coming soon screen --------
 show_soon:
     call tui_clear
     mov ecx, SOON
@@ -426,7 +381,6 @@ show_soon:
     call wait_enter
     ret
 
-; -------- entrypoint --------
 _start:
     call raw_on
     call tui_hide

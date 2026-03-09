@@ -1,10 +1,3 @@
-; src/games/pong.asm
-; PONG (2 jugadores) - palas HORIZONTALES:
-;   P1 (arriba): A / D
-;   P2 (abajo): Flechas <- ->
-;   ESC: volver al menu
-; Terminal ya esta en RAW mode (lo hace main.asm)
-
 global show_pong
 
 %define SYS_READ   3
@@ -25,19 +18,21 @@ section .data
 P_CLS     db 0x1B,'[2J',0x1B,'[H'
 P_CLS_L   equ $-P_CLS
 
-P_TITLE   db '                  PONG',10,10
+P_TITLE   db '              PONG (SOLITARIO)',10,10
 P_TITLE_L equ $-P_TITLE
 
-P_HELP    db 'P1: A/D (arriba)   P2: <- -> (abajo)   ESC: volver',10,10
+P_HELP    db 'MOVER: <- -> (abajo)   ESC: volver',10,10
 P_HELP_L  equ $-P_HELP
 
-P_SCORE   db 'P1: 0   P2: 0',10,10
+P_SCORE   db 'FALLOS: 0   GOLPES: 0',10,10
 P_SCORE_L equ $-P_SCORE
 
-P_WIN1    db 10,'GANA P1!  (ENTER para volver)',10
+P_WIN1    db 10,'DEMASIADOS FALLOS! (ENTER para volver)',10
 P_WIN1_L  equ $-P_WIN1
-P_WIN2    db 10,'GANA P2!  (ENTER para volver)',10
+P_WIN2    db 10,'HAS GANADO! (ENTER para volver)',10
 P_WIN2_L  equ $-P_WIN2
+
+pong_fps  dd 0, 20000000
 
 section .bss
 p_key     resb 1
@@ -45,8 +40,8 @@ p_tmp1    resb 1
 
 p1x       resd 1
 p2x       resd 1
-ballx        resd 1
-bally        resd 1
+ballx     resd 1
+bally     resd 1
 vx        resd 1
 vy        resd 1
 
@@ -74,7 +69,6 @@ p_p:
     call p_wout
     ret
 
-; returns AL: 'A','D','L','R','E','Q' or 0
 p_read_key:
     mov ecx, p_key
     mov edx, 1
@@ -87,15 +81,6 @@ p_read_key:
     je .enter
     cmp al, 13
     je .enter
-
-    cmp al, 'a'
-    je .A
-    cmp al, 'A'
-    je .A
-    cmp al, 'd'
-    je .D
-    cmp al, 'D'
-    je .D
 
     cmp al, 0x1B
     jne .none
@@ -127,12 +112,6 @@ p_read_key:
     ret
 .enter:
     mov al, 'E'
-    ret
-.A:
-    mov al, 'A'
-    ret
-.D:
-    mov al, 'D'
     ret
 .L:
     mov al, 'L'
@@ -174,20 +153,6 @@ p_init:
     mov byte [ended], 0
     ret
 
-p_clamp_p1:
-    mov eax, [p1x]
-    cmp eax, 1
-    jge .okL
-    mov eax, 1
-.okL:
-    mov edx, (P_W - P_PAD - 1)
-    cmp eax, edx
-    jle .okR
-    mov eax, edx
-.okR:
-    mov [p1x], eax
-    ret
-
 p_clamp_p2:
     mov eax, [p2x]
     cmp eax, 1
@@ -208,7 +173,6 @@ p_reset_ball:
     mov eax, (P_INH/2 + 1)
     mov [bally], eax
 
-    ; AL: 1 si marca P1, 2 si marca P2
     cmp al, 1
     jne .toP1
     mov dword [vy], 1
@@ -232,7 +196,6 @@ p_adjust_vx:
     ret
 
 p_update:
-    ; rebote lateral
     mov eax, [ballx]
     mov edx, [vx]
     cmp eax, 1
@@ -250,7 +213,6 @@ p_update:
     mov dword [vx], -1
 
 .nextY:
-    ; next x,y
     mov eax, [ballx]
     add eax, [vx]
     mov esi, eax
@@ -259,34 +221,11 @@ p_update:
     add eax, [vy]
     mov edi, eax
 
-    ; top paddle line
     cmp edi, Y_TOPPAD
     jne .chkBotPad
 
-    mov eax, [p1x]
-    mov ebx, eax
-    add ebx, (P_PAD-1)
-    cmp esi, eax
-    jl .scoreP2
-    cmp esi, ebx
-    jg .scoreP2
-
     mov dword [vy], 1
-    mov eax, esi
-    sub eax, [p1x]
-    call p_adjust_vx
     jmp .applyMove
-
-.scoreP2:
-    mov al, 2
-    inc byte [s2]
-    cmp byte [s2], 5
-    jne .reset
-    mov byte [ended], 2
-    ret
-.reset:
-    call p_reset_ball
-    ret
 
 .chkBotPad:
     cmp edi, Y_BOTPAD
@@ -304,6 +243,13 @@ p_update:
     mov eax, esi
     sub eax, [p2x]
     call p_adjust_vx
+    
+    inc byte [s2]
+    cmp byte [s2], 9
+    jne .contMove
+    mov byte [ended], 2
+    ret
+.contMove:
     jmp .applyMove
 
 .scoreP1:
@@ -352,17 +298,6 @@ p_draw_row:
     mov byte [linebuf + (P_W-1)], '|'
     mov byte [linebuf + (P_W)], 10
 
-    ; paddles
-    cmp esi, Y_TOPPAD
-    jne .botpad
-    mov eax, [p1x]
-    mov ecx, P_PAD
-    mov edi, linebuf
-    add edi, eax
-.pt:
-    mov byte [edi], '='
-    inc edi
-    loop .pt
 .botpad:
     cmp esi, Y_BOTPAD
     jne .ball
@@ -404,13 +339,12 @@ p_draw:
     mov edx, P_HELP_L
     call p_p
 
-    ; patch digits
     mov al, [s1]
     add al, '0'
-    mov [P_SCORE+4], al
+    mov [P_SCORE+8], al
     mov al, [s2]
     add al, '0'
-    mov [P_SCORE+12], al
+    mov [P_SCORE+22], al
 
     mov ecx, P_SCORE
     mov edx, P_SCORE_L
@@ -446,6 +380,11 @@ show_pong:
 .loop:
     call p_draw
 
+    mov eax, 162
+    mov ebx, pong_fps
+    xor ecx, ecx
+    int 0x80
+
     mov al, [ended]
     cmp al, 0
     jne .end_screen
@@ -454,37 +393,22 @@ show_pong:
     cmp al, 'Q'
     je .ret_menu
 
-    ; P1: A/D
-    cmp al, 'A'
-    jne .chkD
-    mov eax, [p1x]
-    dec eax
-    mov [p1x], eax
-    call p_clamp_p1
-    jmp .tick
-.chkD:
-    cmp al, 'D'
-    jne .chkL
-    mov eax, [p1x]
-    inc eax
-    mov [p1x], eax
-    call p_clamp_p1
+    cmp al, 'L'
+    je .moveL
+    cmp al, 'R'
+    je .moveR
     jmp .tick
 
-    ; P2: <- ->
-.chkL:
-    cmp al, 'L'
-    jne .chkR
+.moveL:
     mov eax, [p2x]
-    dec eax
+    sub eax, 3
     mov [p2x], eax
     call p_clamp_p2
     jmp .tick
-.chkR:
-    cmp al, 'R'
-    jne .tick
+
+.moveR:
     mov eax, [p2x]
-    inc eax
+    add eax, 3
     mov [p2x], eax
     call p_clamp_p2
 
