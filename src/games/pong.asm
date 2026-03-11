@@ -9,7 +9,7 @@ P_W      equ 60
 P_H      equ 20
 P_INW    equ (P_W-2)
 P_INH    equ (P_H-2)
-P_PAD    equ 9
+P_PAD    equ 12
 
 Y_TOPPAD equ 2
 Y_BOTPAD equ (P_H-2)
@@ -401,14 +401,14 @@ show_pong:
 
 .moveL:
     mov eax, [p2x]
-    sub eax, 3
+    sub eax, 8
     mov [p2x], eax
     call p_clamp_p2
     jmp .tick
 
 .moveR:
     mov eax, [p2x]
-    add eax, 3
+    add eax, 8
     mov [p2x], eax
     call p_clamp_p2
 

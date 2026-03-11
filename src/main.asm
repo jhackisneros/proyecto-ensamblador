@@ -49,7 +49,7 @@ TOP_L   equ $-TOPSEG
 
 MID0 db '|1) TRES EN RAYA         |'
 MID1 db '|2) PONG (1 JUGADOR)     |'
-MID2 db '|3) COMING SOON          |'
+MID2 db '|2) PONG (1 JUGADOR)     |'
 MID_L equ 26
 
 MIDTAB dd MID0, MID1, MID2
