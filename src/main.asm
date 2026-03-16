@@ -1,6 +1,7 @@
 global _start
 extern show_tres
 extern show_pong
+extern show_invaders
 
 %define SYS_EXIT   1
 %define SYS_READ   3
@@ -49,7 +50,7 @@ TOP_L   equ $-TOPSEG
 
 MID0 db '|1) TRES EN RAYA         |'
 MID1 db '|2) PONG (1 JUGADOR)     |'
-MID2 db '|2) PONG (1 JUGADOR)     |'
+MID2 db '|3) SPACE INVADERS       |'
 MID_L equ 26
 
 MIDTAB dd MID0, MID1, MID2
@@ -58,7 +59,7 @@ SEL0    db 10,' >>> [ JUGAR TRES EN RAYA ] <<< ',10
 SEL0_L  equ $-SEL0
 SEL1    db 10,' >>> [ JUGAR PONG ]         <<< ',10
 SEL1_L  equ $-SEL1
-SEL2    db 10,' >>> [ PROXIMAMENTE... ]    <<< ',10
+SEL2    db 10,' >>> [ SPACE INVADERS ]     <<< ',10
 SEL2_L  equ $-SEL2
 
 SELTAB  dd SEL0, SEL1, SEL2
@@ -234,6 +235,7 @@ draw_menu:
 
     mov ebx, [selected]
 
+    ; TOP DE LAS 3 CAJAS
     mov eax, 0
     mov ecx, TOPSEG
     mov edx, TOP_L
@@ -259,6 +261,7 @@ draw_menu:
     mov edx, 1
     call p
 
+    ; CENTRO DE LAS 3 CAJAS
     mov edi, MIDTAB
     mov eax, 0
     mov ecx, [edi + 0*4]
@@ -285,6 +288,7 @@ draw_menu:
     mov edx, 1
     call p
 
+    ; BASE DE LAS 3 CAJAS
     mov eax, 0
     mov ecx, TOPSEG
     mov edx, TOP_L
@@ -310,6 +314,7 @@ draw_menu:
     mov edx, 1
     call p
 
+    ; TEXTO SELECCIONADO
     mov eax, [selected]
     mov edi, SELTAB
     mov ecx, [edi + eax*4]
@@ -395,7 +400,7 @@ _start:
     cmp eax, 1
     je .go_pong
     cmp eax, 2
-    je .go_soon
+    je .go_invaders
     jmp .loop
 
 .go_tres:
@@ -406,8 +411,8 @@ _start:
     call show_pong
     jmp .loop
 
-.go_soon:
-    call show_soon
+.go_invaders:
+    call show_invaders
     jmp .loop
 
 .exit:
