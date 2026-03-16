@@ -75,9 +75,11 @@ selected resd 1
 section .text
 
 wout:
+    push ebx               ; Protegemos EBX para no perder la seleccion
     mov eax, SYS_WRITE
     mov ebx, STDOUT
     int 0x80
+    pop ebx                ; Restauramos EBX
     ret
 
 rin:
@@ -110,15 +112,23 @@ tui_show:
     ret
 
 rev_on:
+    push ecx               ; Guardamos el texto original
+    push edx
     mov ecx, REVON
     mov edx, REVON_L
     call wout
+    pop edx                ; Restauramos el texto original
+    pop ecx
     ret
 
 rev_off:
+    push ecx               ; Guardamos el texto original
+    push edx
     mov ecx, REVOFF
     mov edx, REVOFF_L
     call wout
+    pop edx                ; Restauramos el texto original
+    pop ecx
     ret
 
 raw_on:
